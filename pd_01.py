@@ -1,36 +1,14 @@
 import pandas as pd
-# lap 0 data
-data = {
 
-    'ชื่อ': ['สมชาย', 'สมหญิง', 'สมศักดิ์'],
-    'อายุ': [25, 30, 35],
-    'เงินเดือน': [30000, 45000, 50000]
-}
+df = pd.read_excel('mock_isp_data.xlsx')
+print('ห้าแถวแรก')
+print(df.head())
 
-# lab 1 สร้าง dataframe
-df = pd.DataFrame(data=data)
+print('ข้อมูล data frame')
+print(df.info())
 
-print(df)
+print('รายละเอียดข้อมูล')
+print(df.describe())
 
-# Lab 2 เลือกดู 1 คอลัม
-print('ดูแค่คอลัมชื่อ')
-print(df['ชื่อ'])
-
-print(df['เงินเดือน'])
-
-# lap 3 เลือกดูหลายคอลัม
-print(df[['ชื่อ', 'เงินเดือน']])
-print(df[['ชื่อ', 'อายุ', 'เงินเดือน']])
-
-# ทำไม ต้องมี [[ ]] สองอัน
-# แยกดูให้ชัดเจนขึ้น 
-# แบบละเอียด แยกที่ละตัวแปร
-columns_i_want = ['ชื่อ', 'เงินเดือน']  # นี่คือ list
-result = df[columns_i_want]
-print(result)
-
-# แบบที่สอง เขียนรวมกัน 
-result = df[['ชื่อ', 'เงินเดือน', 'อายุ']]  # df[[ ]] นอกคือ data ข้างในคือ คอลัมที่จะเอา
-print(result)
-
-
+print('ดูชื่อ column  ทั้งหมด')
+print(df.columns)
