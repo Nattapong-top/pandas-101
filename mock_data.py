@@ -6,8 +6,8 @@ mock_data = {
     'SUBS_STATUS': ['Active', 'Active', 'Suspended', 'Active', 'Terminated'],
     'CUST_FULL_NAME': ['ABC Corp', 'XYZ Co.,Ltd', 'Pah Nattapong Service', 'JukThong Tech', 'Sample Client'],
     'PRODUCT_TYPE': ['FTTH', 'Mobile', 'Mobile', 'DATA SERVICE', 'FTTH'],
-    'CONTRACT_START_DT': ['2023-01-01', '2023-05-15', '2022-10-20', '2024-01-10', '2023-12-01'],
-    'CONTRACT_END_DT': ['2024-01-01', '2024-05-15', '2023-10-20', '2025-01-10', '2024-12-01']
+    'CONTRACT_START_DT': ['2025-03-01', '2025-05-15', '2024-10-20', '2024-01-10', '2024-12-01'],
+    'CONTRACT_END_DT': ['2026-03-01', '2026-05-15', '2025-10-20', '2025-01-10', '2025-12-01']
 }
 
 # 2. แปลง Dictionary เป็น DataFrame
