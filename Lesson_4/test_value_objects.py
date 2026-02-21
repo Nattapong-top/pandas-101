@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
-from domain.TrackingNumber import TrackingNumber, Money
+from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket
 
 # -----------------------------------------
 # Test Cases สำหรับ TrackingNumber
@@ -43,3 +43,19 @@ def test_money_invalid_currency_format():
     # สกุลเงินต้องมี 3 ตัวอักษรเท่านั้น (มาตรฐาน ISO)
     with pytest.raises(ValidationError):
         Money(amount=100.0, currency="THAI_BAHT")
+
+def test_claim_ticket_creation():
+    # 1. เตรียมชิ้นส่วน (Value Objects)
+    tid = TicketId(value="CMP-1001")
+    tn = TrackingNumber(value="TH1234567890")
+    price = Money(amount=886.26, currency="THB")
+
+        # 2. สร้าง Entity
+    ticket = ClaimTicket(
+        ticket_id=tid,
+        tracking_number=tn,
+        compensation_amount=price
+    )
+
+    assert ticket.ticket_id.value == "CMP-1001"
+    assert ticket.version == 1  # เริ่มต้นต้องเป็นเวอร์ชัน 1
