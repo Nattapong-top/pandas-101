@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
-from domain.TrackingNumber import TrackingNumber
+from domain.TrackingNumber import TrackingNumber, Money
 
 # -----------------------------------------
 # Test Cases สำหรับ TrackingNumber
@@ -24,3 +24,22 @@ def test_invalid_type_tracking_number():
     with pytest.raises(ValidationError):
         TrackingNumber(value=12345678) # ต้องเป็น String เท่านั้น
 
+# -----------------------------------------
+# Test Cases สำหรับ Money
+# -----------------------------------------
+
+def test_valid_money_creation():
+    # จำลองค่าจากไฟล์ป๋า: 886.26 THB
+    m = Money(amount=886.26, currency="THB")
+    assert m.amount == 886.26
+    assert m.currency == "THB"
+
+def test_money_negative_amount():
+    # กฎคือเงินเคลมต้องไม่ติดลบ ถ้าติดลบต้องพัง (Error)
+    with pytest.raises(ValidationError):
+        Money(amount=-100.0, currency="THB")
+
+def test_money_invalid_currency_format():
+    # สกุลเงินต้องมี 3 ตัวอักษรเท่านั้น (มาตรฐาน ISO)
+    with pytest.raises(ValidationError):
+        Money(amount=100.0, currency="THAI_BAHT")
