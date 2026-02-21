@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
-from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket
+from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket, ClaimCase
 
 # -----------------------------------------
 # Test Cases สำหรับ TrackingNumber
@@ -59,3 +59,35 @@ def test_claim_ticket_creation():
 
     assert ticket.ticket_id.value == "CMP-1001"
     assert ticket.version == 1  # เริ่มต้นต้องเป็นเวอร์ชัน 1
+
+
+    # -----------------------------------------
+# Test Cases สำหรับ ClaimCase (Aggregate)
+# -----------------------------------------
+
+def test_add_multiple_tickets_to_same_case():
+    # 1. เตรียม Tracking เดียวกัน (กุญแจหลัก)
+    tn = TrackingNumber(value="TH1234567890")
+    
+    # 2. สร้าง Aggregate Root (ตระกร้า)
+    claim_case = ClaimCase(tracking_number=tn)
+
+    # 3. เตรียมใบเคลม 2 ใบ (จำลองว่าแจ้งซ้ำ 2 ครั้ง)
+    ticket1 = ClaimTicket(
+        ticket_id=TicketId(value="CMP-1001"),
+        tracking_number=tn,
+        compensation_amount=Money(amount=500, currency="THB")
+    )
+    ticket2 = ClaimTicket(
+        ticket_id=TicketId(value="CMP-1002"),
+        tracking_number=tn,
+        compensation_amount=Money(amount=300, currency="THB")
+    )
+
+    # 4. ใส่ใบเคลมลงในตระกร้า
+    claim_case.add_ticket(ticket1)
+    claim_case.add_ticket(ticket2)
+
+    # 5. ตรวจสอบ: ในตระกร้าต้องมี 2 ใบ และยอดรวมต้องเป็น 800 บาท
+    assert len(claim_case.tickets) == 2
+    assert claim_case.total_compensation.amount == 800.0

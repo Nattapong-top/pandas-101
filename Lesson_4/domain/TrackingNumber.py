@@ -48,6 +48,39 @@ class ClaimTicket(BaseModel):
         print(f'อัพเดทยอดเงินเป็น {new_money} (version: {self.version})')
 
 
+class ClaimCase(BaseModel):
+    """
+    Aggregate Root: ตระกร้าคุมใบเคลมของสินค้า 1 ชิ้น
+    """
+    tracking_number: TrackingNumber
+    # รายการใบเคลมที่อยู่ในตระกร้านี้ (เริ่มต้นเป็น List ว่าง)
+    tickets: list[ClaimTicket] = Field(default_factory=list)
+    
+    # สถานะเงินรวม (Value Object ที่ป๋าทำไว้)
+    # เริ่มต้นที่ 0 THB
+    total_compensation: Money = Field(
+        default_factory=lambda: Money(amount=0, currency="THB")
+    )
+
+    def add_ticket(self, ticket: ClaimTicket):
+        """
+        กฎธุรกิจ: 
+        1. ตรวจสอบว่า Tracking ตรงกันไหม
+        2. เพิ่มลง List
+        3. อัปเดตยอดเงินรวม
+        """
+        # เช็กกฎ Invariant: ห้ามเอาใบเคลมคนละสินค้ามาปนกัน
+        if ticket.tracking_number.value != self.tracking_number.value:
+            raise ValueError("ป๋าครับ! ใบเคลมนี้มันคนละเลข Tracking กันนะ")
+
+        self.tickets.append(ticket)
+        
+        # อัปเดตยอดรวม (ป๋าเห็นไหมครับ เราเอา Value Object มาคำนวณกันในนี้เลย)
+        new_amount = self.total_compensation.amount + ticket.compensation_amount.amount
+        self.total_compensation = Money(amount=new_amount, currency="THB")
+        
+        print(f"✅ เพิ่ม {ticket.ticket_id.value} สำเร็จ! ยอดรวมเคสนี้: {self.total_compensation}")
+
 
 if __name__ == "__main__":
     good_track = TrackingNumber(value='TH1234567890')
@@ -77,3 +110,17 @@ if __name__ == "__main__":
 
     new_prict = Money(amount=950.00, currency='THB')
     my_ticket.update_compensation(new_prict)
+
+
+    tn = TrackingNumber(value="TH1234567890")
+    my_case = ClaimCase(tracking_number=tn)
+
+    # ลองเพิ่มใบที่ 1
+    t1 = ClaimTicket(ticket_id=TicketId(value="CMP-01"), tracking_number=tn, 
+                     compensation_amount=Money(amount=100, currency="THB"))
+    my_case.add_ticket(t1)
+
+    # ลองเพิ่มใบที่ 2
+    t2 = ClaimTicket(ticket_id=TicketId(value="CMP-02"), tracking_number=tn, 
+                     compensation_amount=Money(amount=200, currency="THB"))
+    my_case.add_ticket(t2)
