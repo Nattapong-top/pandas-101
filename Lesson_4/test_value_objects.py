@@ -6,7 +6,7 @@ import os
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
 from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket, ClaimCase
 from domain.TrackingNumber import InMemoryClaimRepository, PandasClaimRepository
-from domain.TrackingNumber import ClaimEnrichmentService
+from domain.TrackingNumber import ClaimEnrichmentService, ClaimRepository
 
 # -----------------------------------------
 # Test Cases สำหรับ TrackingNumber
@@ -279,7 +279,7 @@ def test_money_addition_different_currencies():
     
     # กฎธุรกิจ: ห้ามเอาเงินคนละสกุลมาบวกกันตรงๆ
     # เราจะแก้โค้ดใน Money ให้ดักเรื่องนี้
-    with pytest.raises(ValueError, match=f"Cannot and different currencies: {m1.currency} and {m2.currency}"):
+    with pytest.raises(ValueError, match=f"Cannot add different currencies: {m1.currency} and {m2.currency}"):
         # สมมติเราเขียนฟังก์ชันบวกเงิน
         m1.add(m2)
 
@@ -325,3 +325,54 @@ def test_repository_handles_nan_amount():
     money = Money(amount=processed_amount, currency="THB")
     
     assert money.amount == 0.0
+
+def test_repository_enforces_contract():
+    """
+    ทดสอบว่า ABC ทำงานจริง: ถ้าเขียนไม่ครบ ต้องห้ามสร้าง Object
+    """
+    
+    # 1. ลองสร้างคลาสลูกแบบ "มักง่าย" (ไม่ยอมเขียน save, get)
+    class LazyRepository(ClaimRepository):
+        def get_all_cases(self):
+            return []
+        # จงใจลืม save และ get_by_tracking
+    
+    # 2. คาดหวังว่า Python ต้องด่า (raise TypeError)
+    # ถ้า Python ไม่ด่า แสดงว่า ABC ของเรา "กาก" (ไม่ศักดิ์สิทธิ์)
+    with pytest.raises(TypeError) as excinfo:
+        repo = LazyRepository() # จังหวะนี้ต้องบึ้ม!
+    
+    # 3. (Optional) เช็กข้อความ Error ว่าด่าถูกเรื่องไหม
+    # ข้อความควรบอกว่า "Can't instantiate abstract class... with abstract methods save..."
+    print(f"✅ ABC ทำงานถูกต้อง! ดักจับคนขี้เกียจได้: {excinfo.value}")
+
+def test_claim_ticket_version_increments_on_update():
+    """
+    TDD Test 20: ทดสอบว่าเมื่อมีการแก้ไขข้อมูล (State Change) 
+    เลข Version ของ Entity ต้องขยับขึ้นเสมอ
+    """
+    # 1. [Arrange] สร้างใบเคลมเวอร์ชันเริ่มต้น
+    tn = TrackingNumber(value="TH-99999")
+    ticket = ClaimTicket(
+        ticket_id=TicketId(value="CMP-TEST-020"),
+        tracking_number=tn,
+        compensation_amount=Money(amount=100, currency="THB")
+    )
+    
+    # ตรวจสอบค่าเริ่มต้น (Version ต้องเป็น 1)
+    assert ticket.version == 1
+    assert ticket.compensation_amount.amount == 100.0
+
+    # 2. [Act] พนักงานทำการแก้ไขยอดเงินชดเชย
+    new_money = Money(amount=500, currency="THB")
+    ticket.update_compensation(new_money)
+
+    # 3. [Assert] ยอดเงินต้องเปลี่ยน และเลข Version ต้องขยับเป็น 2
+    assert ticket.compensation_amount.amount == 500.0
+    assert ticket.version == 2
+    
+    # แก้ไขซ้ำอีกรอบเพื่อดูความต่อเนื่อง
+    ticket.update_compensation(Money(amount=1000, currency="THB"))
+    assert ticket.version == 3
+
+    print(f"✅ Test 20 Passed: ระบบติดตามเวอร์ชันของ {ticket.ticket_id.value} ทำงานถูกต้อง!")
