@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
 from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket, ClaimCase
-
+from domain.TrackingNumber import InMemoryClaimRepository, PandasClaimRepository
 # -----------------------------------------
 # Test Cases สำหรับ TrackingNumber
 # -----------------------------------------
@@ -91,3 +91,103 @@ def test_add_multiple_tickets_to_same_case():
     # 5. ตรวจสอบ: ในตระกร้าต้องมี 2 ใบ และยอดรวมต้องเป็น 800 บาท
     assert len(claim_case.tickets) == 2
     assert claim_case.total_compensation.amount == 800.0
+
+    # -----------------------------------------
+# Test Cases สำหรับ Repository
+# -----------------------------------------
+
+def test_repository_can_save_and_retrieve_case():
+    # 1. สร้างลิ้นชักจำลอง (In-Memory) สำหรับเทส
+    repo = InMemoryClaimRepository()
+    
+    # 2. สร้างเคสจำลอง
+    tn = TrackingNumber(value="TH1234567890")
+    claim_case = ClaimCase(tracking_number=tn)
+    
+    # ลองใส่ใบเคลมเข้าไป 1 ใบ
+    ticket = ClaimTicket(
+        ticket_id=TicketId(value="CMP-999"),
+        tracking_number=tn,
+        compensation_amount=Money(amount=1000, currency="THB")
+    )
+    claim_case.add_ticket(ticket)
+
+    # 3. สั่งเซฟลงลิ้นชัก!
+    repo.save(claim_case)
+
+    # 4. สั่งค้นหาจากลิ้นชักด้วยเลข Tracking
+    retrieved_case = repo.get_by_tracking(tn)
+
+    # 5. ตรวจสอบว่าหาเจอไหม และข้อมูลครบหรือเปล่า
+    assert retrieved_case is not None # ต้องไม่เป็นค่าว่าง
+    assert retrieved_case.tracking_number.value == "TH1234567890"
+    assert len(retrieved_case.tickets) == 1
+    assert retrieved_case.total_compensation.amount == 1000.0
+
+
+# -----------------------------------------
+# Test Cases สำหรับ Repository
+# -----------------------------------------
+
+def test_repository_can_save_and_retrieve_case():
+    # 1. สร้างลิ้นชักจำลอง (In-Memory) สำหรับเทส
+    repo = InMemoryClaimRepository()
+    
+    # 2. สร้างเคสจำลอง
+    tn = TrackingNumber(value="TH1234567890")
+    claim_case = ClaimCase(tracking_number=tn)
+    
+    # ลองใส่ใบเคลมเข้าไป 1 ใบ
+    ticket = ClaimTicket(
+        ticket_id=TicketId(value="CMP-999"),
+        tracking_number=tn,
+        compensation_amount=Money(amount=1000, currency="THB")
+    )
+    claim_case.add_ticket(ticket)
+
+    # 3. สั่งเซฟลงลิ้นชัก!
+    repo.save(claim_case)
+
+    # 4. สั่งค้นหาจากลิ้นชักด้วยเลข Tracking
+    retrieved_case = repo.get_by_tracking(tn)
+
+    # 5. ตรวจสอบว่าหาเจอไหม และข้อมูลครบหรือเปล่า
+    assert retrieved_case is not None # ต้องไม่เป็นค่าว่าง
+    assert retrieved_case.tracking_number.value == "TH1234567890"
+    assert len(retrieved_case.tickets) == 1
+    assert retrieved_case.total_compensation.amount == 1000.0
+
+
+import pytest
+import pandas as pd
+import os
+
+# -----------------------------------------
+# Integration Test สำหรับ Pandas Repository
+# -----------------------------------------
+
+def test_pandas_repo_can_load_from_real_excel():
+    # 1. [Arrange] เตรียมไฟล์ Excel จำลองสำหรับเทส
+    test_file = r"test_integration.xlsx"
+    mock_df = pd.DataFrame({
+        'complaint_ticket_id': ['TKT-001'],
+        'tracking_no': ['TH999999'],
+        'compensation_final_amt': [500.0]
+    })
+    mock_df.to_excel(test_file, index=False)
+
+    try:
+        # 2. [Act] ลองใช้ Repository อ่านไฟล์นี้
+        repo = PandasClaimRepository(test_file)
+        results = repo.get_all_cases()
+
+        # 3. [Assert] ตรวจสอบว่าของที่ได้ออกมา "ไม่ใช่แค่ตาราง" แต่เป็น "Object"
+        assert len(results) == 1
+        assert isinstance(results[0], ClaimCase) # ต้องเป็น Class ClaimCase
+        assert results[0].tracking_number.value == "TH999999"
+        assert results[0].total_compensation.amount == 500.0
+
+    finally:
+        # ลบไฟล์ทิ้งหลังเทสเสร็จ (รักษาความสะอาด)
+        if os.path.exists(test_file):
+            os.remove(test_file)

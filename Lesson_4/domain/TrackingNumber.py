@@ -1,4 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
+import pandas as pd
+
 
 class TrackingNumber(BaseModel):
 
@@ -82,6 +84,73 @@ class ClaimCase(BaseModel):
         print(f"✅ เพิ่ม {ticket.ticket_id.value} สำเร็จ! ยอดรวมเคสนี้: {self.total_compensation}")
 
 
+from typing import Optional
+
+# นี่คือ "หน้าตา" ของลิ้นชักที่ระบบเราต้องการ (Interface)
+class ClaimRepository:
+    def save(self, claim_case: ClaimCase):
+        raise NotImplementedError
+        
+    def get_by_tracking(self, tracking: TrackingNumber) -> Optional[ClaimCase]:
+        raise NotImplementedError
+
+# นี่คือ "ลิ้นชักของปลอม" ที่เอาไว้ใช้รันเทสให้ไวปรู๊ดปร๊าด (In-Memory)
+class InMemoryClaimRepository(ClaimRepository):
+    def __init__(self):
+        # ใช้ Dictionary ของ Python เป็นฐานข้อมูลจำลองไปก่อน
+        self._db = {} 
+
+    def save(self, claim_case: ClaimCase):
+        # เอาเลข Tracking เป็น Key และเอา Aggregate ทั้งก้อนเป็น Value
+        self._db[claim_case.tracking_number.value] = claim_case
+        print(f"💾 [DB จำลอง] บันทึกเคสของพัสดุ {claim_case.tracking_number.value} ลงลิ้นชักเรียบร้อย!")
+
+    def get_by_tracking(self, tracking: TrackingNumber) -> Optional[ClaimCase]:
+        # ค้นหาใน Dictionary
+        found_case = self._db.get(tracking.value)
+        if found_case:
+            print(f"🔍 [DB จำลอง] ค้นพบเคสของพัสดุ {tracking.value}")
+        else:
+            print(f"❌ [DB จำลอง] ไม่พบพัสดุ {tracking.value} ในระบบ")
+        return found_case
+
+
+class PandasClaimRepository(ClaimRepository): # สืบทอดมาจากพิมพ์เขียวลิ้นชัก
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+
+    def get_all_cases(self) -> list[ClaimCase]:
+        # 1. ใช้ Pandas อ่านไฟล์ (ทบทวนบทที่ 1)
+        df = pd.read_excel(self.file_path)
+        
+        cases = []
+        for index, row in df.iterrows():
+            # 2. กระบวนการ "แปลงร่าง" (Transformation)
+            # ป๋าดูนะครับ เราเอาข้อมูลดิบจาก row มาห่อด้วย Value Object ทันที!
+            tn = TrackingNumber(value=row['tracking_no'])
+            tid = TicketId(value=row['complaint_ticket_id'])
+            
+            # สมมติเราดึงราคามา (ถ้าไม่มีให้เป็น 0)
+            amount = row.get('compensation_final_amt', 0)
+            money = Money(amount=amount, currency="THB")
+
+            # 3. สร้าง Entity และ Aggregate
+            ticket = ClaimTicket(
+                ticket_id=tid, 
+                tracking_number=tn, 
+                compensation_amount=money
+            )
+            
+            # สร้างตระกร้า (Case) แล้วใส่ใบเคลมลงไป
+            new_case = ClaimCase(tracking_number=tn)
+            new_case.add_ticket(ticket)
+            
+            cases.append(new_case)
+            
+        return cases
+
+
+
 if __name__ == "__main__":
     good_track = TrackingNumber(value='TH1234567890')
     print(f'สำเร็จ: ได้รับพัสดุ {good_track.value}')
@@ -115,6 +184,8 @@ if __name__ == "__main__":
     tn = TrackingNumber(value="TH1234567890")
     my_case = ClaimCase(tracking_number=tn)
 
+
+
     # ลองเพิ่มใบที่ 1
     t1 = ClaimTicket(ticket_id=TicketId(value="CMP-01"), tracking_number=tn, 
                      compensation_amount=Money(amount=100, currency="THB"))
@@ -124,3 +195,22 @@ if __name__ == "__main__":
     t2 = ClaimTicket(ticket_id=TicketId(value="CMP-02"), tracking_number=tn, 
                      compensation_amount=Money(amount=200, currency="THB"))
     my_case.add_ticket(t2)
+
+
+
+    # --- ลองใช้งานจริง ---
+    # สร้างลิ้นชัก
+    repo = InMemoryClaimRepository()
+    
+    # สร้างข้อมูลและเซฟ
+    tn1 = TrackingNumber(value="TH9999999999")
+    case1 = ClaimCase(tracking_number=tn1)
+    repo.save(case1)
+    
+    # ลองค้นหาดู
+    result = repo.get_by_tracking(TrackingNumber(value="TH9999999999"))
+    print(f"ยอดรวมในระบบตอนนี้: {result.total_compensation}")
+
+    # --- ลองใช้งานกับไฟล์ของป๋า ---
+    # repo = PandasClaimRepository(r"../Lesson_4/mock_claim_data.xlsx")
+    # all_cases = repo.load_all_cases()
