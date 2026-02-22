@@ -1,5 +1,7 @@
 import pytest
 from pydantic import ValidationError
+import pandas as pd
+import os
 
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
 from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket, ClaimCase
@@ -160,9 +162,7 @@ def test_repository_can_save_and_retrieve_case():
     assert retrieved_case.total_compensation.amount == 1000.0
 
 
-import pytest
-import pandas as pd
-import os
+
 
 # -----------------------------------------
 # Integration Test สำหรับ Pandas Repository
@@ -221,3 +221,107 @@ def test_claim_enrichment_logic():
 
     # 4. [Assert] ยอดรวมในเคสต้องเปลี่ยนจาก 0 เป็น 1500
     assert my_case.total_compensation.amount == 1500.0
+
+# -----------------------------------------
+# Test Cases: Sad Path & Edge Case
+# -----------------------------------------
+
+# 1. [Sad Path] กรณีค้นหาไม่เจอ (Lookup Missing)
+def test_enrichment_tracking_not_found():
+    service = ClaimEnrichmentService()
+    tn = TrackingNumber(value="TH-NOT-FOUND")
+    case = ClaimCase(tracking_number=tn)
+    
+    # ข้อมูลไฟล์ 2 ไม่มีเลข TH-NOT-FOUND
+    money_map = {"TH-EXIST": Money(amount=100, currency="THB")}
+    
+    # [Act] ลองเติมเงิน
+    service.enrich(case, money_map)
+    
+    # [Assert] ยอดเงินต้องยังเป็น 0 เหมือนเดิม และโปรแกรมต้องไม่ Error (ไม่ค้าง)
+    assert case.total_compensation.amount == 0.0
+    print("✅ Sad Path Passed: หาไม่เจอแต่โปรแกรมไม่พัง")
+
+# 2. [Edge Case] กรณีเงินเป็น 0.00 บาท (ยอดน้อยที่สุดที่เป็นไปได้)
+def test_money_zero_amount():
+    # กฎเราบอกว่า ge=0 (มากกว่าหรือเท่ากับ 0) ดังนั้น 0 ต้องผ่าน
+    zero_money = Money(amount=0, currency="THB")
+    assert zero_money.amount == 0
+    print("✅ Edge Case Passed: รองรับยอดเงิน 0 บาท")
+
+# 3. [Edge Case] กรณีแจ้งเคลมซ้ำจำนวนมาก (Stress Test เบาๆ)
+def test_huge_number_of_tickets():
+    tn = TrackingNumber(value="TH-BULK")
+    case = ClaimCase(tracking_number=tn)
+    
+    # จำลองการแจ้งซ้ำ 100 ครั้งใน 1 สินค้า
+    for i in range(100):
+        t = ClaimTicket(
+            ticket_id=TicketId(value=f"TKT-{i}"),
+            tracking_number=tn,
+            compensation_amount=Money(amount=10, currency="THB")
+        )
+        case.add_ticket(t)
+    
+    assert len(case.tickets) == 100
+    assert case.total_compensation.amount == 1000.0 # 10 * 100
+    print("✅ Edge Case Passed: รองรับการแจ้งซ้ำจำนวนมาก")
+
+
+# -----------------------------------------
+# Test Cases: Advanced Sad Path & Edge Cases
+# -----------------------------------------
+
+# 1. [Sad Path] สกุลเงินไม่ตรงกัน (Currency Mismatch)
+def test_money_addition_different_currencies():
+    m1 = Money(amount=100, currency="THB")
+    m2 = Money(amount=10, currency="USD")
+    
+    # กฎธุรกิจ: ห้ามเอาเงินคนละสกุลมาบวกกันตรงๆ
+    # เราจะแก้โค้ดใน Money ให้ดักเรื่องนี้
+    with pytest.raises(ValueError, match=f"Cannot and different currencies: {m1.currency} and {m2.currency}"):
+        # สมมติเราเขียนฟังก์ชันบวกเงิน
+        m1.add(m2)
+
+# 2. [Edge Case] เลข Tracking มีเว้นวรรค (Whitespace Handling)
+def test_tracking_number_trimming():
+    # User กดเคาะ Spacebar มาใน Excel "  TH12345  "
+    tn = TrackingNumber(value="  TH12345  ")
+    
+    # ผลลัพธ์ต้องถูกตัดช่องว่างออกอัตโนมัติ (ขอบคุณ Pydantic!)
+    assert tn.value == "TH12345"
+
+# 3. [Sad Path] ยอดเงินใน Excel เป็นค่าว่าง (NaN Handling)
+def test_repository_handles_nan_amount():
+    # จำลองว่า Pandas อ่านเจอค่าว่าง (NaN)
+    import numpy as np
+    raw_amount = np.nan 
+    
+    # เราต้องมีลอจิกแปลง NaN เป็น 0 ก่อนส่งให้ Money Object
+    processed_amount = 0 if pd.isna(raw_amount) else raw_amount
+    money = Money(amount=processed_amount, currency="THB")
+    
+    assert money.amount == 0.0
+
+
+def test_tracking_number_trimming():
+    tn = TrackingNumber(value='  TH12345  ')
+
+    assert tn.value == 'TH12345'
+
+def test_ticket_id_trimming():
+    ticket_id=TicketId(value=f'  TKT-234  ')
+
+    assert ticket_id.value == 'TKT-234'
+
+# 3. [Sad Path] ยอดเงินใน Excel เป็นค่าว่าง (NaN Handling)
+def test_repository_handles_nan_amount():
+    # จำลองว่า Pandas อ่านเจอค่าว่าง (NaN)
+    import numpy as np
+    raw_amount = np.nan 
+    
+    # เราต้องมีลอจิกแปลง NaN เป็น 0 ก่อนส่งให้ Money Object
+    processed_amount = 0 if pd.isna(raw_amount) else raw_amount
+    money = Money(amount=processed_amount, currency="THB")
+    
+    assert money.amount == 0.0

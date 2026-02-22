@@ -22,12 +22,22 @@ class Money(BaseModel):
     def currency_must_be_uppercase(cls, v):
         return v.upper()
     
+    def add(self, other: 'Money') -> 'Money':
+        if self.currency != other.currency:
+            raise ValueError(f'Cannot and different currencies: {self.currency} and {other.currency}')
+        return Money(amount=self.amount + other.amount, currency=self.currency)
+
+    
     def __str__(self):
         return f'{self.amount:,.2f} {self.currency}'
     
 
 class TicketId(BaseModel):
     value: str = Field(..., min_length=1)
+    
+    @field_validator('value')
+    def trimming(cls, v):
+        return v.strip()
 
 class ClaimTicket(BaseModel):
     """
@@ -238,4 +248,4 @@ if __name__ == "__main__":
 
     # --- ลองใช้งานกับไฟล์ของป๋า ---
     # repo = PandasClaimRepository(r"../Lesson_4/mock_claim_data.xlsx")
-    # all_cases = repo.load_all_cases()
+    # all_cases = repo.get_all_cases()
