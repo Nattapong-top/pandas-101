@@ -150,6 +150,31 @@ class PandasClaimRepository(ClaimRepository): # สืบทอดมาจา�
         return cases
 
 
+class ClaimEnrichmentService:
+    """
+    Service สำหรับเติมข้อมูลยอดเงินชดเชยให้สมบูรณ์
+    """
+    def enrich(self, claim_case: ClaimCase, compensation_map: dict[str, Money]):
+        # ดึงเลข Tracking จากแฟ้มเคสออกมา
+        tracking_val = claim_case.tracking_number.value
+        
+        # ค้นหาในข้อมูลไฟล์ 2 (compensation_map)
+        if tracking_val in compensation_map:
+            real_money = compensation_map[tracking_val]
+            
+            # อัปเดตเงินในใบแจ้งทุกใบที่อยู่ในเคสนี้
+            for ticket in claim_case.tickets:
+                ticket.compensation_amount = real_money
+            
+            # สั่งให้ Aggregate คำนวณยอดรวมใหม่ (Logic อยู่ใน ClaimCase)
+            # หมายเหตุ: ในที่นี้เราต้องเรียกเมธอดเพื่ออัปเดตสถานะเงินรวม
+            new_amt = sum(t.compensation_amount.amount for t in claim_case.tickets)
+            claim_case.total_compensation = Money(amount=new_amt, currency="THB")
+            
+            print(f"✨ เติมเงินให้ {tracking_val} สำเร็จ: {real_money}")
+        else:
+            print(f"⚠️ ไม่พบยอดเงินสำหรับ {tracking_val} ในข้อมูลไฟล์ 2")
+
 
 if __name__ == "__main__":
     good_track = TrackingNumber(value='TH1234567890')

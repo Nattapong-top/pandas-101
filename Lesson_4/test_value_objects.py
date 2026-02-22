@@ -4,6 +4,8 @@ from pydantic import ValidationError
 # สมมติว่าเราเรียกใช้คลาสจากไฟล์ domain (ที่เรากำลังจะสร้าง)
 from domain.TrackingNumber import TrackingNumber, Money, TicketId, ClaimTicket, ClaimCase
 from domain.TrackingNumber import InMemoryClaimRepository, PandasClaimRepository
+from domain.TrackingNumber import ClaimEnrichmentService
+
 # -----------------------------------------
 # Test Cases สำหรับ TrackingNumber
 # -----------------------------------------
@@ -191,3 +193,31 @@ def test_pandas_repo_can_load_from_real_excel():
         # ลบไฟล์ทิ้งหลังเทสเสร็จ (รักษาความสะอาด)
         if os.path.exists(test_file):
             os.remove(test_file)
+
+# -----------------------------------------
+# Test Case: การเติมยอดเงินชดเชยให้สมบูรณ์
+# -----------------------------------------
+
+def test_claim_enrichment_logic():
+    # 1. [Arrange] เตรียมเคสที่เงินยังเป็น 0 (จากไฟล์ 1)
+    tn = TrackingNumber(value="TH777")
+    my_case = ClaimCase(tracking_number=tn)
+    # ใส่ใบแจ้งที่เงินเป็น 0 บาทลงไป
+    my_case.add_ticket(ClaimTicket(
+        ticket_id=TicketId(value="TKT-001"),
+        tracking_number=tn,
+        compensation_amount=Money(amount=0, currency="THB")
+    ))
+
+    # 2. [Arrange] เตรียมข้อมูลเงินจริง (จำลองข้อมูลที่โหลดมาจากไฟล์ 2)
+    # เราใช้ Dictionary เพราะมันค้นหาไวกว่า List (Big O เป็น 1)
+    money_map = {
+        "TH777": Money(amount=1500.0, currency="THB")
+    }
+
+    # 3. [Act] เรียกใช้ Service (ที่เรากำลังจะเขียน)
+    service = ClaimEnrichmentService()
+    service.enrich(my_case, money_map)
+
+    # 4. [Assert] ยอดรวมในเคสต้องเปลี่ยนจาก 0 เป็น 1500
+    assert my_case.total_compensation.amount == 1500.0
